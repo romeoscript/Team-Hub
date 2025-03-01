@@ -2,7 +2,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { User, Team } = require('../models');
+const supabase = require('../utils/supabase');
 const { sendVerificationEmail } = require('../utils/emailService');
 const upload = require('../utils/multer');
 const cloudinary = require('../utils/cloudinary');
@@ -32,17 +32,27 @@ const signup = async (req, res) => {
         profilePhoto = result.secure_url;
       } catch (uploadError) {
         console.error('Profile photo upload failed:', uploadError);
-        // Continue with signup even if photo upload fails
       }
     }
+
     // Check if user already exists
-    const userExists = await User.findOne({ email });
-    if (userExists) {
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (existingUser) {
       return res.status(400).json({ message: 'User already exists with this email' });
     }
 
     // Check if username is taken
-    const usernameExists = await User.findOne({ username });
+    const { data: usernameExists } = await supabase
+      .from('users')
+      .select('id')
+      .eq('username', username)
+      .maybeSingle();
+
     if (usernameExists) {
       return res.status(400).json({ message: 'Username is already taken' });
     }
@@ -59,71 +69,109 @@ const signup = async (req, res) => {
     // Generate unique UID
     const uid = crypto.randomBytes(16).toString('hex');
 
-    // Determine role and teamId based on invitation code
+    // Determine role based on invitation code
     let role = 'admin'; // Default role is admin
     let teamId = null;
-    let team = null;
-
+    
     if (teamInviteCode) {
-      console.log(Team,'another')
       // Find team by invite code
-      team = await Team.findOne({ inviteCode: teamInviteCode });
+      const { data: team } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('invite_code', teamInviteCode)
+        .maybeSingle();
+
       if (team) {
         role = 'editor'; // User invited to a team becomes an editor
-        teamId = team.teamId;
+        teamId = team.id;
       } else {
         return res.status(400).json({ message: 'Invalid team invitation code' });
       }
-    } else {
-      // Create a new team for this admin user
-      const newTeamId = 'team_' + crypto.randomBytes(8).toString('hex');
-      team = new Team({
-        teamId: newTeamId,
-        adminId: uid,
-        editors: [],
-        inviteCode: crypto.randomBytes(8).toString('hex') // Generate team invite code
-      });
-      await team.save();
-      teamId = newTeamId;
     }
 
-    // Create new user
-    const newUser = new User({
-      uid,
-      email,
-      username,
-      password: hashedPassword,
-      profilePhoto,
-      role,
-      teamId,
-      emailVerified: false,
-      subscribedToUpdates,
-      verificationToken,
-      verificationTokenExpiry: tokenExpiry
-    });
+    // Create new user (without team_id for now if admin)
+    const { data: newUser, error: userError } = await supabase
+      .from('users')
+      .insert([{
+        id: uid,
+        email,
+        username,
+        password: hashedPassword,
+        profile_photo: profilePhoto,
+        role,
+        team_id: teamId, // This will be null for new admins, updated later
+        email_verified: false,
+        subscribed_to_updates: subscribedToUpdates,
+        verification_token: verificationToken,
+        verification_token_expiry: tokenExpiry.toISOString()
+      }])
+      .select()
+      .single();
+    
+    if (userError || !newUser) {
+      console.error('User creation error:', userError);
+      return res.status(500).json({ message: 'Error creating user', error: userError?.message });
+    }
 
-    await newUser.save();
+    // If user is admin and not part of a team, create a new team
+    if (role === 'admin' && !teamId) {
+      const { data: newTeam, error: teamError } = await supabase
+        .from('teams')
+        .insert([{
+          admin_id: uid, // Now user exists so this is valid
+          invite_code: crypto.randomBytes(8).toString('hex')
+        }])
+        .select()
+        .single();
+      
+      if (teamError || !newTeam) {
+        console.error('Team creation error:', teamError);
+        return res.status(500).json({ message: 'Error creating team', error: teamError?.message });
+      }
+      
+      teamId = newTeam.id;
+      
+      // Update user with team_id
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ team_id: teamId })
+        .eq('id', uid);
+        
+      if (updateError) {
+        console.error('Error updating user with team ID:', updateError);
+        return res.status(500).json({ message: 'Error updating user with team ID', error: updateError.message });
+      }
+    }
 
-    // Send verification email
+    // If user was invited to a team, add them to the editors table
+    if (teamInviteCode && teamId) {
+      const { error: editorError } = await supabase
+        .from('team_editors')
+        .insert([{
+          team_id: teamId,
+          user_id: uid
+        }]);
+      
+      if (editorError) {
+        console.error('Error adding user as team editor:', editorError);
+        // Continue anyway, this is not critical
+      }
+    }
+
+    // Only send verification email after everything else succeeded
     await sendVerificationEmail(email, verificationToken);
-
-    // If user was invited to a team, add them to the editors array
-    if (teamInviteCode && team) {
-      team.editors.push(uid);
-      await team.save();
-    }
 
     res.status(201).json({ 
       message: 'User registered successfully. Please check your email to verify your account.',
       user: {
-        uid: newUser.uid,
+        uid: newUser.id,
         email: newUser.email,
         username: newUser.username,
         role: newUser.role,
-        teamId: newUser.teamId,
-        profilePhoto: newUser.profilePhoto,
-        emailVerified: newUser.emailVerified,
-        subscribedToUpdates: newUser.subscribedToUpdates
+        teamId: teamId, // Use the updated teamId
+        profilePhoto: newUser.profile_photo,
+        emailVerified: newUser.email_verified,
+        subscribedToUpdates: newUser.subscribed_to_updates
       }
     });
   } catch (error) {
@@ -132,29 +180,34 @@ const signup = async (req, res) => {
   }
 };
 
-
 // Email verification
-
 const verifyEmail = async (req, res) => {
   try {
     const { token } = req.params;
     
-    const user = await User.findOne({ 
-      verificationToken: token,
-      verificationTokenExpiry: { $gt: new Date() }
-    });
+    // Find user with matching token and non-expired token
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('verification_token', token)
+      .gt('verification_token_expiry', new Date().toISOString())
+      .maybeSingle();
 
     if (!user) {
       return res.status(400).send(getVerificationFailureHTML('Invalid or expired verification token'));
     }
 
     // Update user to verified status
-    user.emailVerified = true;
-    user.verificationToken = undefined;
-    user.verificationTokenExpiry = undefined;
-    await user.save();
+    await supabase
+      .from('users')
+      .update({ 
+        email_verified: true,
+        verification_token: null,
+        verification_token_expiry: null
+      })
+      .eq('id', user.id);
 
-    // Return success HTML instead of JSON
+    // Return success HTML
     return res.send(getVerificationSuccessHTML(user.email));
   } catch (error) {
     console.error('Email verification error:', error);
@@ -162,7 +215,7 @@ const verifyEmail = async (req, res) => {
   }
 };
 
-
+// HTML templates - keeping your existing code
 function getVerificationSuccessHTML(email) {
   return `
     <!DOCTYPE html>
@@ -235,7 +288,6 @@ function getVerificationSuccessHTML(email) {
   `;
 }
 
-// HTML template for verification failure
 function getVerificationFailureHTML(errorMessage) {
   return `
     <!DOCTYPE html>
@@ -307,19 +359,25 @@ function getVerificationFailureHTML(errorMessage) {
     </html>
   `;
 }
+
 // User login
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     // Find user
-    const user = await User.findOne({ email });
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .maybeSingle();
+
     if (!user) {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
     // Check if email is verified
-    if (!user.emailVerified) {
+    if (!user.email_verified) {
       return res.status(401).json({ message: 'Please verify your email before logging in' });
     }
 
@@ -332,10 +390,10 @@ const login = async (req, res) => {
     // Generate JWT token
     const payload = {
       user: {
-        id: user.uid,
+        id: user.id,
         email: user.email,
         role: user.role,
-        teamId: user.teamId
+        teamId: user.team_id
       }
     };
 
@@ -348,14 +406,14 @@ const login = async (req, res) => {
         res.json({ 
           token,
           user: {
-            uid: user.uid,
+            uid: user.id,
             email: user.email,
             username: user.username,
-            profilePhoto: user.profilePhoto,
+            profilePhoto: user.profile_photo,
             role: user.role,
-            teamId: user.teamId,
-            emailVerified: user.emailVerified,
-            subscribedToUpdates: user.subscribedToUpdates
+            teamId: user.team_id,
+            emailVerified: user.email_verified,
+            subscribedToUpdates: user.subscribed_to_updates
           }
         });
       }
@@ -372,24 +430,40 @@ const generateInvite = async (req, res) => {
     const { userId } = req.body;
 
     // Find user
-    const user = await User.findOne({ uid: userId });
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
     if (!user || user.role !== 'admin') {
       return res.status(403).json({ message: 'Only team admins can generate invite links' });
     }
 
     // Find team
-    const team = await Team.findOne({ teamId: user.teamId });
+    const { data: team } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('id', user.team_id)
+      .maybeSingle();
+
     if (!team) {
       return res.status(404).json({ message: 'Team not found' });
     }
 
     // Generate or use existing invite code
-    if (!team.inviteCode) {
-      team.inviteCode = crypto.randomBytes(8).toString('hex');
-      await team.save();
+    let inviteCode = team.invite_code;
+    
+    if (!inviteCode) {
+      inviteCode = crypto.randomBytes(8).toString('hex');
+      
+      await supabase
+        .from('teams')
+        .update({ invite_code: inviteCode })
+        .eq('id', team.id);
     }
 
-    const inviteLink = `${process.env.FRONTEND_URL}/signup?teamInvite=${team.inviteCode}`;
+    const inviteLink = `${process.env.FRONTEND_URL}/signup?teamInvite=${inviteCode}`;
 
     res.json({ inviteLink });
   } catch (error) {
@@ -404,12 +478,17 @@ const resendVerification = async (req, res) => {
     const { email } = req.body;
 
     // Find user
-    const user = await User.findOne({ email });
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .maybeSingle();
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (user.emailVerified) {
+    if (user.email_verified) {
       return res.status(400).json({ message: 'Email is already verified' });
     }
 
@@ -418,9 +497,13 @@ const resendVerification = async (req, res) => {
     const tokenExpiry = new Date();
     tokenExpiry.setHours(tokenExpiry.getHours() + 24);
 
-    user.verificationToken = verificationToken;
-    user.verificationTokenExpiry = tokenExpiry;
-    await user.save();
+    await supabase
+      .from('users')
+      .update({ 
+        verification_token: verificationToken,
+        verification_token_expiry: tokenExpiry.toISOString()
+      })
+      .eq('id', user.id);
 
     // Send verification email
     await sendVerificationEmail(email, verificationToken);
