@@ -35,7 +35,6 @@ const signup = async (req, res) => {
         // Continue with signup even if photo upload fails
       }
     }
-
     // Check if user already exists
     const userExists = await User.findOne({ email });
     if (userExists) {
@@ -66,6 +65,7 @@ const signup = async (req, res) => {
     let team = null;
 
     if (teamInviteCode) {
+      console.log(Team,'another')
       // Find team by invite code
       team = await Team.findOne({ inviteCode: teamInviteCode });
       if (team) {
@@ -134,6 +134,7 @@ const signup = async (req, res) => {
 
 
 // Email verification
+
 const verifyEmail = async (req, res) => {
   try {
     const { token } = req.params;
@@ -144,7 +145,7 @@ const verifyEmail = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired verification token' });
+      return res.status(400).send(getVerificationFailureHTML('Invalid or expired verification token'));
     }
 
     // Update user to verified status
@@ -153,13 +154,159 @@ const verifyEmail = async (req, res) => {
     user.verificationTokenExpiry = undefined;
     await user.save();
 
-    res.status(200).json({ message: 'Email verified successfully. You can now login.' });
+    // Return success HTML instead of JSON
+    return res.send(getVerificationSuccessHTML(user.email));
   } catch (error) {
     console.error('Email verification error:', error);
-    res.status(500).json({ message: 'Server error during email verification' });
+    return res.status(500).send(getVerificationFailureHTML('Server error during email verification'));
   }
 };
 
+
+function getVerificationSuccessHTML(email) {
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Email Verified Successfully</title>
+        <style>
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            text-align: center; 
+            background-color: #f5f5f5;
+          }
+          .success-container { 
+            background-color: white; 
+            border-radius: 10px; 
+            padding: 40px 30px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            margin-top: 50px;
+          }
+          .success-icon { 
+            color: #4CAF50; 
+            font-size: 70px; 
+            margin-bottom: 20px; 
+            background-color: #e8f5e9;
+            width: 100px;
+            height: 100px;
+            line-height: 100px;
+            border-radius: 50%;
+            margin: 0 auto 30px auto;
+          }
+          h1 { 
+            color: #333; 
+            margin-bottom: 20px; 
+          }
+          p { 
+            color: #666; 
+            line-height: 1.6; 
+            margin-bottom: 25px;
+          }
+          .btn { 
+            display: inline-block; 
+            background-color: #4CAF50; 
+            color: white; 
+            padding: 12px 30px; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            font-weight: 600;
+            transition: all 0.3s ease;
+          }
+          .btn:hover {
+            background-color: #388E3C;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+          }
+        </style>
+      </head>
+      <body>
+        <div class="success-container">
+          <div class="success-icon">✓</div>
+          <h1>Email Verified Successfully!</h1>
+          <p>Thank you for verifying your email address: <strong>${email}</strong></p>
+          <p>Your account is now active and you can access all features of our platform.</p>
+          <a href="${process.env.FRONTEND_URL}/login" class="btn">Go to Login</a>
+        </div>
+      </body>
+    </html>
+  `;
+}
+
+// HTML template for verification failure
+function getVerificationFailureHTML(errorMessage) {
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Email Verification Failed</title>
+        <style>
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            text-align: center; 
+            background-color: #f5f5f5;
+          }
+          .error-container { 
+            background-color: white; 
+            border-radius: 10px; 
+            padding: 40px 30px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin-top: 50px;
+          }
+          .error-icon { 
+            color: #f44336; 
+            font-size: 70px; 
+            margin-bottom: 20px; 
+            background-color: #ffebee;
+            width: 100px;
+            height: 100px;
+            line-height: 100px;
+            border-radius: 50%;
+            margin: 0 auto 30px auto;
+          }
+          h1 { 
+            color: #333; 
+            margin-bottom: 20px; 
+          }
+          p { 
+            color: #666; 
+            line-height: 1.6; 
+            margin-bottom: 25px; 
+          }
+          .btn { 
+            display: inline-block; 
+            background-color: #2196F3; 
+            color: white; 
+            padding: 12px 30px; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            font-weight: 600;
+            transition: all 0.3s ease;
+          }
+          .btn:hover {
+            background-color: #1976D2;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+          }
+        </style>
+      </head>
+      <body>
+        <div class="error-container">
+          <div class="error-icon">✗</div>
+          <h1>Email Verification Failed</h1>
+          <p>${errorMessage}</p>
+          <p>You can request a new verification email from your account.</p>
+          <a href="${process.env.FRONTEND_URL}/resend-verification" class="btn">Request New Verification</a>
+        </div>
+      </body>
+    </html>
+  `;
+}
 // User login
 const login = async (req, res) => {
   try {
