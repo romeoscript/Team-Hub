@@ -1,0 +1,77 @@
+// utils/emailService.js
+const nodemailer = require('nodemailer');
+require('dotenv').config();
+
+
+const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    secure: true,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.SMTP_PASS
+    }
+  });
+
+// Function to send verification email
+const sendVerificationEmail = async (email, verificationToken) => {
+  const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+  
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: 'Email Verification',
+    html: `
+      <h1>Welcome to our platform!</h1>
+      <p>Please click the link below to verify your email address:</p>
+      <a href="${verificationUrl}" target="_blank">Verify Email</a>
+      <p>This link will expire in 24 hours.</p>
+    `
+  };
+
+  return transporter.sendMail(mailOptions);
+};
+
+// Function to send password reset email
+const sendPasswordResetEmail = async (email, resetToken) => {
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+  
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: 'Password Reset',
+    html: `
+      <h1>Password Reset Request</h1>
+      <p>You requested a password reset. Please click the link below to reset your password:</p>
+      <a href="${resetUrl}" target="_blank">Reset Password</a>
+      <p>This link will expire in 1 hour.</p>
+      <p>If you didn't request this, please ignore this email and your password will remain unchanged.</p>
+    `
+  };
+
+  return transporter.sendMail(mailOptions);
+};
+
+// Function to send team invitation email
+const sendTeamInviteEmail = async (email, inviteLink, teamAdmin) => {
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: 'Team Invitation',
+    html: `
+      <h1>You've Been Invited to Join a Team</h1>
+      <p>${teamAdmin} has invited you to join their team on our platform.</p>
+      <p>Please click the link below to accept the invitation and create your account:</p>
+      <a href="${inviteLink}" target="_blank">Accept Invitation</a>
+      <p>This invitation link will expire in 7 days.</p>
+    `
+  };
+
+  return transporter.sendMail(mailOptions);
+};
+
+module.exports = {
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+  sendTeamInviteEmail
+};

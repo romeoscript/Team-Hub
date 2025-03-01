@@ -1,0 +1,115 @@
+// server.js
+const express = require('express');
+const cors = require('cors');
+const morgan = require('morgan');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
+const mongoose = require('mongoose');
+const upload = require('./utils/multer');
+require('dotenv').config();
+
+// Import controllers
+const { 
+  signup, 
+  verifyEmail, 
+  login, 
+  generateInvite, 
+  resendVerification 
+} = require('./controllers/authController');
+
+// Import models for DB test endpoint
+const { User, Team } = require('./models');
+
+const app = express();
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('Connected to MongoDB Atlas'))
+  .catch((err) => console.error('Error connecting to MongoDB:', err));
+
+
+const corsOptions = {
+  origin: '*', 
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 200
+};
+
+// Middleware
+app.use(helmet()); 
+app.use(cors(corsOptions));
+
+
+
+app.use(morgan('dev')); 
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: {
+    error: 'Too many requests from this IP, please try again later.'
+  }
+});
+app.use(limiter);
+
+// Auth Routes
+app.post('/api/auth/signup', upload.single('profilePhoto'), signup);
+app.get('/api/auth/verify-email/:token', verifyEmail);
+app.post('/api/auth/login', login);
+app.post('/api/auth/generate-invite', generateInvite);
+app.post('/api/auth/resend-verification', resendVerification);
+
+// Add a test endpoint to check DB
+app.get('/api/test-db', async (req, res) => {
+  try {
+    // Get counts of your collections
+    const userCount = await User.countDocuments();
+    const teamCount = await Team.countDocuments();
+    
+    res.json({
+      status: 'Database connection working',
+      collections: {
+        users: userCount,
+        teams: teamCount
+      }
+    });
+  } catch (error) {
+    console.error('Database test error:', error);
+    res.status(500).json({ error: 'Database test failed', message: error.message });
+  }
+});
+
+// Health check route with CORS info
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok',
+    cors: {
+      allowedOrigins: ['http://localhost:5173', 'https://www.cribhaven.com.ng']
+    }
+  });
+});
+
+// General error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    error: 'Something broke!',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
+const PORT = process.env.PORT || 5001;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
