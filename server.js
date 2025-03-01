@@ -5,7 +5,6 @@ const morgan = require('morgan');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
-const mongoose = require('mongoose');
 const upload = require('./utils/multer');
 require('dotenv').config();
 
@@ -22,7 +21,6 @@ const {
 const { User, Team } = require('./models');
 
 const app = express();
-
 
 
 const corsOptions = {
