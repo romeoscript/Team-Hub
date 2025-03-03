@@ -85,7 +85,7 @@ const sendTeamInviteEmail = async ({ recipientEmail, senderName, teamName, invit
         </p>
         
         <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e1e1e1; text-align: center; color: #999; font-size: 12px;">
-          <p>&copy; ${new Date().getFullYear()} Your App Name. All rights reserved.</p>
+          <p>&copy; ${new Date().getFullYear()} Your App Name. All rights reserved..</p>
         </div>
       </div>
     `
