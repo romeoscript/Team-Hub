@@ -492,8 +492,44 @@ const sendInviteEmail = async (req, res) => {
       });
     }
     
-    // Rest of the code to verify user is admin and get team info
-    // ...
+    // Find user and verify they are an admin
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.role !== 'admin') {
+      return res.status(403).json({ message: 'Only team admins can send team invites' });
+    }
+
+    // Find team
+    const { data: team } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('id', user.team_id)
+      .maybeSingle();
+
+    if (!team) {
+      return res.status(404).json({ message: 'Team not found' });
+    }
+
+    // Ensure the team has an invite code
+    let inviteCode = team.invite_code;
+    if (!inviteCode) {
+      inviteCode = crypto.randomBytes(8).toString('hex');
+      
+      await supabase
+        .from('teams')
+        .update({ invite_code: inviteCode })
+        .eq('id', team.id);
+    }
+
+    const inviteLink = `${process.env.FRONTEND_URL}/signup?teamInvite=${inviteCode}`;
     
     // Send invites to all emails
     const results = [];
