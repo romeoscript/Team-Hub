@@ -66,7 +66,7 @@ const sendTeamInviteEmail = async ({ recipientEmail, senderName, teamName, invit
     //     to: email,
     //     subject: 'Team Invitation',
     to: recipientEmail,
-    subject: `You've been invited to join ${teamName}`,
+    subject: `You've been invited to join  ${teamName}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e1e1e1; border-radius: 5px;">
         <div style="text-align: center; margin-bottom: 20px;">
