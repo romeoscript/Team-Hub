@@ -158,9 +158,7 @@ const signup = async (req, res) => {
       }
     }
 
-    // Only send verification email after everything else succeeded
-    await sendVerificationEmail(email, verificationToken);
-
+    // Send response to user immediately before email sending
     res.status(201).json({ 
       message: 'User registered successfully. Please check your email to verify your account.',
       user: {
@@ -174,6 +172,19 @@ const signup = async (req, res) => {
         subscribedToUpdates: newUser.subscribed_to_updates
       }
     });
+
+    // Send verification email asynchronously after response is sent
+    // This prevents the email sending delay from affecting the API response time
+    process.nextTick(async () => {
+      try {
+        await sendVerificationEmail(email, verificationToken);
+        console.log(`Verification email sent to ${email}`);
+      } catch (emailError) {
+        console.error('Error sending verification email:', emailError);
+        // Consider implementing a retry mechanism or queue here
+      }
+    });
+
   } catch (error) {
     console.error('Signup error:', error);
     res.status(500).json({ message: 'Server error during registration', error: error.message });

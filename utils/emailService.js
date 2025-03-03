@@ -3,15 +3,34 @@ const nodemailer = require('nodemailer');
 require('dotenv').config();
 
 
-const transporter = nodemailer.createTransport({
+// const transporter = nodemailer.createTransport({
+//     host: process.env.SMTP_HOST,
+//     port: process.env.SMTP_PORT,
+//     secure: true,
+//     auth: {
+//       user: process.env.EMAIL_USER,
+//       pass: process.env.SMTP_PASS
+//     }
+//   });
+
+  const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: process.env.SMTP_PORT,
     secure: true,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.SMTP_PASS
-    }
+    },
+    pool: true,               // Use connection pooling
+    maxConnections: 5,        // Maximum number of connections to make
+    maxMessages: 100,         // Maximum number of messages per connection
+    rateDelta: 20000,         // How many messages to send before rate limiting
+    rateLimit: 5,             // How many messages in rateDelta time
+    socketTimeout: 30000,     // Socket timeout in milliseconds
+    logger: process.env.NODE_ENV === 'development' ,
+    priority: 'high'
   });
+  
 
 // Function to send verification email
 const sendVerificationEmail = async (email, verificationToken) => {
@@ -21,9 +40,14 @@ const sendVerificationEmail = async (email, verificationToken) => {
 
   
   const mailOptions = {
-    from: process.env.EMAIL_USER,
+    from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_FROM_ADDRESS}>`,
     to: email,
-    subject: 'Email Verification',
+    subject: 'Verify Your Email Address',
+    priority: 'high', // Mark individual emails as high priority
+    headers: {
+      'X-Priority': '1', // Additional priority header for compatibility
+      'Importance': 'high'
+    },
     html: `
       <h1>Welcome to our platform!</h1>
       <p>Please click the link below to verify your email address:</p>
