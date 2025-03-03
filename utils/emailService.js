@@ -40,12 +40,12 @@ const sendVerificationEmail = async (email, verificationToken) => {
 
   
   const mailOptions = {
-    from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_FROM_ADDRESS}>`,
+    from: `"${process.env.EMAIL_USER}" <${process.env.EMAIL_USER}>`,
     to: email,
     subject: 'Verify Your Email Address',
-    priority: 'high', // Mark individual emails as high priority
+    priority: 'high', 
     headers: {
-      'X-Priority': '1', // Additional priority header for compatibility
+      'X-Priority': '1', 
       'Importance': 'high'
     },
     html: `
