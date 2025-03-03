@@ -14,7 +14,8 @@ const {
   verifyEmail, 
   login, 
   generateInvite, 
-  resendVerification 
+  resendVerification, 
+  sendInviteEmail
 } = require('./controllers/authController');
 
 // Import models for DB test endpoint
@@ -58,6 +59,7 @@ app.get('/api/auth/verify-email/:token', verifyEmail);
 app.post('/api/auth/login', login);
 app.post('/api/auth/generate-invite', generateInvite);
 app.post('/api/auth/resend-verification', resendVerification);
+app.post('/api/auth/send-invite', sendInviteEmail)
 
 // Add a test endpoint to check DB
 app.get('/api/test-db', async (req, res) => {

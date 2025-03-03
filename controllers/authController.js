@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const supabase = require('../utils/supabase');
-const { sendVerificationEmail } = require('../utils/emailService');
+const { sendVerificationEmail, sendTeamInviteEmail } = require('../utils/emailService');
 const upload = require('../utils/multer');
 const cloudinary = require('../utils/cloudinary');
 
@@ -472,6 +472,70 @@ const generateInvite = async (req, res) => {
   }
 };
 
+// Send team invite via email
+const sendInviteEmail = async (req, res) => {
+  try {
+    const { userId, recipientEmails, customMessage } = req.body;
+    
+    // Validate recipientEmails is an array
+    if (!Array.isArray(recipientEmails) || recipientEmails.length === 0) {
+      return res.status(400).json({ message: 'Please provide at least one recipient email' });
+    }
+    
+    // Validate email format for all emails
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const invalidEmails = recipientEmails.filter(email => !emailRegex.test(email));
+    if (invalidEmails.length > 0) {
+      return res.status(400).json({ 
+        message: 'Some email addresses are invalid', 
+        invalidEmails 
+      });
+    }
+    
+    // Rest of the code to verify user is admin and get team info
+    // ...
+    
+    // Send invites to all emails
+    const results = [];
+    for (const email of recipientEmails) {
+      try {
+        // Record in database
+        await supabase.from('team_invitations').insert([{
+          team_id: team.id,
+          email,
+          invite_code: inviteCode,
+          invited_by: userId,
+          created_at: new Date().toISOString(),
+          status: 'pending'
+        }]);
+        
+        // Send email
+        await sendTeamInviteEmail({
+          recipientEmail: email, 
+          senderName: user.username,
+          teamName: team.name || 'our team',
+          inviteLink,
+          customMessage
+        });
+        
+        results.push({ email, status: 'success' });
+      } catch (error) {
+        results.push({ email, status: 'failed', error: error.message });
+      }
+    }
+    
+    res.status(200).json({ 
+      message: 'Team invitations processed',
+      results,
+      successCount: results.filter(r => r.status === 'success').length,
+      failureCount: results.filter(r => r.status === 'failed').length
+    });
+  } catch (error) {
+    console.error('Send invite emails error:', error);
+    res.status(500).json({ message: 'Server error sending invite emails' });
+  }
+};
+
 // Resend verification email
 const resendVerification = async (req, res) => {
   try {
@@ -520,5 +584,6 @@ module.exports = {
   verifyEmail,
   login,
   generateInvite,
+  sendInviteEmail,
   resendVerification
 };
