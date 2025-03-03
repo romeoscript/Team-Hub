@@ -37,7 +37,10 @@ const sendVerificationEmail = async (email, verificationToken) => {
 
 const sendTeamInviteEmail = async ({ recipientEmail, senderName, teamName, inviteLink, customMessage }) => {
   const mailOptions = {
-    from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_FROM_ADDRESS}>`,
+    from: `"${process.env.EMAIL_USER}" <${process.env.EMAIL_USER}>`,
+    from: process.env.EMAIL_USER,
+    //     to: email,
+    //     subject: 'Team Invitation',
     to: recipientEmail,
     subject: `You've been invited to join ${teamName}`,
     html: `
