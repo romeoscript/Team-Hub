@@ -1,0 +1,1 @@
+DROP POLICY insert_team_projects ON projects;

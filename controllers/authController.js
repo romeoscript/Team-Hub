@@ -4,7 +4,6 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const supabase = require('../utils/supabase');
 const { sendVerificationEmail, sendTeamInviteEmail } = require('../utils/emailService');
-const upload = require('../utils/multer');
 const cloudinary = require('../utils/cloudinary');
 
 // User registration

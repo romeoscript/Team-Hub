@@ -7,7 +7,8 @@ const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const upload = require('./utils/multer');
 const { updateLastActive, getTeamMembers } = require('./controllers/teamController');
-const { createProject, getProjectById, updateProject, deleteProject, getProjects } = require('./controllers/projectController');
+const { createProject, getProjectById, updateProject, deleteProject, getProjects, addProjectMember, removeProjectMember, getAvailableTeamMembers } = require('./controllers/projectController');
+
 
 require('dotenv').config();
 
@@ -67,7 +68,10 @@ app.get('/api/project/:projectId', getProjectById);
 app.put('/api/project/:projectId', updateProject);
 app.get('/api/projects/:teamId', getProjects);
 app.delete('/api/project/:projectId', deleteProject);
-app.put('api/members/:userId/last-active', updateLastActive);
+app.put('/api/members/:userId/last-active', updateLastActive);
+app.get('/api/project/:projectId/available-members',  getAvailableTeamMembers);
+app.post('/api/project/:projectId/members',  addProjectMember);
+app.delete('/api/project/:projectId/members/:userId', removeProjectMember);
 
 
 app.get('/api/test-db', async (req, res) => {
